@@ -35,7 +35,12 @@ export default [
             'jsdoc/check-tag-names': 'off',
             'lines-between-class-members': 'off',
             'no-await-in-loop': 'off',
-            'require-atomic-updates': 'off'
+            'no-loop-func': 'off',
+            'no-new': 'off',
+            'no-use-before-define': 'off',
+            'grouped-accessor-pairs': 'off',
+            'require-atomic-updates': 'off',
+            'require-await': 'off'
         }
     }, {
         files: ['**/*.mjs'],

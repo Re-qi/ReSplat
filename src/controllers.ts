@@ -267,6 +267,12 @@ class PointerController {
             if (event.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) {
                 return true;
             }
+            // Both axes active simultaneously (without Shift held) is a
+            // strong trackpad signal — physical mouse wheels only scroll
+            // one axis at a time.
+            if (event.deltaX !== 0 && event.deltaY !== 0 && !event.shiftKey) {
+                return false;
+            }
             // Chrome / Safari: the non-standard wheelDelta{X,Y} properties
             // preserve the raw wheel-tick value (always multiples of ±120 per
             // notch) regardless of macOS scroll smoothing applied to
@@ -284,13 +290,17 @@ class PointerController {
             // (e.g. 100, 125) even with smoothing applied. Trackpads produce
             // continuously varying fractional values on both axes.
             const { deltaX, deltaY } = event;
-            if (deltaX !== 0 && deltaY !== 0) {
-                return false;
-            }
             // Check if delta values are close to integers (within 1% of 1.0).
             // Smooth scrolling / DPI scaling can add slight fractional offsets.
             const isNearInteger = (v: number) => Math.abs(v % 1) < 0.01 || Math.abs(v % 1) > 0.99;
-            return (deltaX === 0 || isNearInteger(deltaX)) && (deltaY === 0 || isNearInteger(deltaY));
+            const dyWheel = deltaY === 0 || isNearInteger(deltaY);
+            const dxWheel = deltaX === 0 || isNearInteger(deltaX);
+            if (!dyWheel || !dxWheel) {
+                return false;
+            }
+            // Default to wheel when uncertain. False positives (trackpad→zoom)
+            // are less disorienting than false negatives (wheel→orbit).
+            return true;
         };
 
         const wheel = (event: WheelEvent) => {

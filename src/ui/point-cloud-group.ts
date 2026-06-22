@@ -5,10 +5,10 @@ import { Events } from '../events';
 import { IndexRanges } from '../index-ranges';
 import { Splat } from '../splat';
 import { State } from '../splat-state';
-import { localize } from './localization';
 import deleteSvg from './svg/delete.svg';
 import gripSvg from './svg/grip.svg';
 import newGroupSvg from './svg/new.svg';
+import { localize } from './localization';
 import { Tooltips } from './tooltips';
 
 const createSvg = (svgString: string) => {
@@ -90,16 +90,16 @@ class PointCloudGroupItem extends Container {
         tooltips.register(deleteBtn, localize('tooltip.point-cloud-group.delete'), 'bottom');
     }
 
+    get selected() {
+        return this.class.contains('selected');
+    }
+
     set selected(value: boolean) {
         if (value) {
             this.class.add('selected');
         } else {
             this.class.remove('selected');
         }
-    }
-
-    get selected() {
-        return this.class.contains('selected');
     }
 }
 
@@ -233,42 +233,25 @@ class PointCloudGroup extends Container {
         // Get serializable group data for a specific splat
         events.function('pointCloudGroup.getGroupsForSplat', (splat: Splat) => {
             return this.groups
-            .filter(g => g.splat === splat)
-            .map((g) => {
-                const ids: number[] = [];
-                g.ranges.forEach(i => ids.push(i));
-                return {
-                    name: g.name,
-                    indices: new Uint32Array(ids).sort()
-                };
-            });
+                .filter(g => g.splat === splat)
+                .map(g => {
+                    const ids: number[] = [];
+                    g.ranges.forEach(i => ids.push(i));
+                    return {
+                        name: g.name,
+                        indices: new Uint32Array(ids).sort()
+                    };
+                });
         });
 
         // Add groups for a specific splat from serialized data
         events.on('pointCloudGroup.addGroupsForSplat', (splat: Splat, groupsData: { name: string; indices: Uint32Array }[]) => {
-            console.log(`[PointCloudGroup.addGroupsForSplat] splat="${splat.filename}" numSplats=${splat.splatData.numSplats} groups=${groupsData.length}`);
             for (const gd of groupsData) {
                 const numSplats = splat.splatData.numSplats;
                 const indexSet = new Set<number>();
-                let minIdx = Infinity, maxIdx = -1;
                 for (let i = 0; i < gd.indices.length; i++) {
                     indexSet.add(gd.indices[i]);
-                    if (gd.indices[i] < minIdx) minIdx = gd.indices[i];
-                    if (gd.indices[i] > maxIdx) maxIdx = gd.indices[i];
                 }
-                console.log(`  group "${gd.name}": indices=${gd.indices.length} range=[${minIdx}, ${maxIdx}] maxSplatIdx=${numSplats - 1}`);
-
-                // Validate indices are within range
-                const outOfRange: number[] = [];
-                for (let i = 0; i < gd.indices.length; i++) {
-                    if (gd.indices[i] >= numSplats) {
-                        outOfRange.push(gd.indices[i]);
-                    }
-                }
-                if (outOfRange.length > 0) {
-                    console.warn(`  WARNING: ${outOfRange.length} indices out of range for "${gd.name}"! Examples: [${outOfRange.slice(0, 10).join(', ')}]`);
-                }
-
                 const ranges = IndexRanges.fromPredicate(numSplats, (i: number) => indexSet.has(i));
 
                 const groupData: PointCloudGroupData = {
@@ -280,14 +263,9 @@ class PointCloudGroup extends Container {
                 this.groups.push(groupData);
             }
 
-            console.log(`[PointCloudGroup.addGroupsForSplat] total groups in this.groups = ${this.groups.length}`);
-
             // Re-render if this splat is currently displayed
             if (this.currentSplat === splat) {
-                console.log('[PointCloudGroup.addGroupsForSplat] rendering groups for current splat');
                 this.renderGroupsForSplat(splat);
-            } else {
-                console.log(`[PointCloudGroup.addGroupsForSplat] currentSplat=${this.currentSplat?.filename || 'null'}, not rendering`);
             }
         });
 
@@ -379,7 +357,7 @@ class PointCloudGroup extends Container {
     private renderGroupsForSplat(splat: Splat) {
         // 保存当前选中的组
         const selectedGroups = this.groupItems.filter(item => item.selected).map(item => item.groupData);
-
+        
         this.listContainer.clear();
         this.groupItems = [];
         const splatGroups = this.groups.filter(g => g.splat === splat);
@@ -494,11 +472,11 @@ class PointCloudGroup extends Container {
                 const { splat, ranges } = groupData;
                 const sortedIds: number[] = [];
                 ranges.forEach((i: number) => sortedIds.push(i));
-
+                
                 // Store selected group data for toolbar
                 this.selectedGroupData = groupData;
                 this.toolbar.hidden = false;
-
+                
                 // Listen for state change to update active group state after selection bound is computed
                 const onStateChanged = () => {
                     // Directly set _activeGroup based on clicked item's state

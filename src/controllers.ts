@@ -335,8 +335,10 @@ class PointerController {
                     zoom(deltaY * -0.02);
                 } else if (event.shiftKey) {
                     pan(event.offsetX, event.offsetY, deltaX, deltaY);
-                } else {
+                } else if (deltaX !== 0 && deltaY !== 0) {
                     orbit(deltaX, deltaY);
+                } else {
+                    zoom(wheelDelta * -0.002);
                 }
             } else if (burstIsWheel) {
                 zoom(wheelDelta * -0.002);
@@ -344,8 +346,10 @@ class PointerController {
                 zoom(deltaY * -0.02);
             } else if (event.shiftKey) {
                 pan(event.offsetX, event.offsetY, deltaX, deltaY);
-            } else {
+            } else if (deltaX !== 0 && deltaY !== 0) {
                 orbit(deltaX, deltaY);
+            } else {
+                zoom(wheelDelta * -0.002);
             }
 
             event.preventDefault();

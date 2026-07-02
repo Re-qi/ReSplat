@@ -1,6 +1,6 @@
 import { Container, Label, Element as PcuiElement, Button, TextInput } from '@playcanvas/pcui';
 
-import { SelectOp } from '../edit-ops';
+import { AddGroupOp, DeleteGroupOp, ModifyGroupRangesOp, SelectOp } from '../edit-ops';
 import { Events } from '../events';
 import { IndexRanges } from '../index-ranges';
 import { Splat } from '../splat';
@@ -114,6 +114,7 @@ class PointCloudGroup extends Container {
     private currentSplat: Splat | null = null;
     private _activeGroup = false;
     private selectedGroupData: PointCloudGroupData | null = null;
+    private selectedGroupDataRef = { current: null as PointCloudGroupData | null };
     private toolbar: Container;
     private toolbarSelectBtn: Button;
     private toolbarAddBtn: Button;
@@ -275,6 +276,26 @@ class PointCloudGroup extends Container {
                 const changed = this.currentSplat !== splat;
                 this.currentSplat = splat;
                 this.hidden = false;
+
+                // When splat selection changes (e.g. splat-item clicked),
+                // deactivate any active point cloud group so gizmo switches
+                // back to entity-level control.
+                if (this._activeGroup) {
+                    this._activeGroup = false;
+                    for (const item of this.groupItems) {
+                        item.selected = false;
+                    }
+                    this.selectedGroupData = null;
+                    this.selectedGroupDataRef.current = null;
+                    this.toolbar.hidden = true;
+
+                    // Re-trigger transform-handler evaluation now that
+                    // _activeGroup is false. Because transform-handler registers
+                    // its selection.changed listener before us, its update()
+                    // already ran while _activeGroup was still true.
+                    this.events.fire('splat.stateChanged', splat);
+                }
+
                 // Only re-render if splat actually changed
                 if (changed) {
                     this.renderGroupsForSplat(splat);
@@ -329,9 +350,16 @@ class PointCloudGroup extends Container {
                 ranges: selectedRanges
             };
 
+            // Do the work eagerly, then fire edit-op for undo support
             this.groups.push(groupData);
             const item = this.addGroupItem(groupData);
             this.groupItems.push(item);
+
+            this.events.fire('edit.add', new AddGroupOp(
+                this.groups, groupData,
+                () => this.renderGroupsForSplat(splat),
+                true
+            ));
         });
 
         // Scene cleared - clear all groups
@@ -400,6 +428,8 @@ class PointCloudGroup extends Container {
         const state = splat.state.data;
         if (splat.numSelected === 0) return;
 
+        const oldRanges = gd.ranges;
+
         const existing = new Set<number>();
         gd.ranges.forEach((i: number) => existing.add(i));
 
@@ -413,12 +443,20 @@ class PointCloudGroup extends Container {
             splat.splatData.numSplats,
             (i: number) => existing.has(i)
         );
+
+        this.events.fire('edit.add', new ModifyGroupRangesOp(
+            gd, oldRanges, gd.ranges,
+            () => this.renderGroupsForSplat(this.currentSplat!),
+            true
+        ));
     }
 
     private handleGroupRemoveFrom(gd: PointCloudGroupData) {
         const splat = gd.splat;
         const state = splat.state.data;
         if (splat.numSelected === 0) return;
+
+        const oldRanges = gd.ranges;
 
         const toRemove = new Set<number>();
         for (let i = 0; i < state.length; i++) {
@@ -434,6 +472,12 @@ class PointCloudGroup extends Container {
             splat.splatData.numSplats,
             (i: number) => currentRanges.has(i) && !toRemove.has(i)
         );
+
+        this.events.fire('edit.add', new ModifyGroupRangesOp(
+            gd, oldRanges, gd.ranges,
+            () => this.renderGroupsForSplat(this.currentSplat!),
+            true
+        ));
     }
 
     private handleGroupDelete(gd: PointCloudGroupData) {
@@ -443,9 +487,17 @@ class PointCloudGroup extends Container {
         }
         if (this.selectedGroupData === gd) {
             this.selectedGroupData = null;
+            this.selectedGroupDataRef.current = null;
             this.toolbar.hidden = true;
         }
         this.renderGroupsForSplat(this.currentSplat!);
+
+        const splat = this.currentSplat!;
+        this.events.fire('edit.add', new DeleteGroupOp(
+            this.groups, gd, this.selectedGroupDataRef,
+            () => this.renderGroupsForSplat(splat),
+            true
+        ));
     }
 
     private addGroupItem(groupData: PointCloudGroupData): PointCloudGroupItem {
@@ -475,13 +527,16 @@ class PointCloudGroup extends Container {
 
                 // Store selected group data for toolbar
                 this.selectedGroupData = groupData;
+                this.selectedGroupDataRef.current = groupData;
                 this.toolbar.hidden = false;
 
-                // Listen for state change to update active group state after selection bound is computed
+                // Set _activeGroup BEFORE firing SelectOp so that when
+                // splat.stateChanged fires, transform-handler sees _activeGroup === true
+                // and pushes SplatsTransformHandler instead of EntityTransformHandler.
+                this._activeGroup = true;
+
+                // Listen for state change to force re-render after selection bound is computed
                 const onStateChanged = () => {
-                    // Directly set _activeGroup based on clicked item's state
-                    // Don't rely on groupItems array as it might be in inconsistent state
-                    this._activeGroup = clicked.selected;
                     // Force a re-render to update the boundary display
                     this.events.invoke('queue', () => {
                         // Trigger a render update
@@ -505,6 +560,7 @@ class PointCloudGroup extends Container {
             } else {
                 // Group deselected - update state immediately
                 this.selectedGroupData = null;
+                this.selectedGroupDataRef.current = null;
                 this.toolbar.hidden = true;
                 this.updateActiveGroupState();
             }

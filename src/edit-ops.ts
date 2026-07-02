@@ -434,6 +434,108 @@ class SplatRenameOp {
     }
 }
 
+// Minimal group data shape shared with point-cloud-group UI
+interface GroupData {
+    name: string;
+    splat: Splat;
+    ranges: IndexRanges;
+}
+
+class AddGroupOp {
+    name = 'addGroup';
+    groups: GroupData[];
+    groupData: GroupData;
+    onChanged: () => void;
+    skipDo: boolean;
+
+    constructor(groups: GroupData[], groupData: GroupData, onChanged: () => void, skipDo = true) {
+        this.groups = groups;
+        this.groupData = groupData;
+        this.onChanged = onChanged;
+        this.skipDo = skipDo;
+    }
+
+    do() {
+        if (!this.skipDo) {
+            this.groups.push(this.groupData);
+            this.onChanged();
+        }
+        this.skipDo = false;
+    }
+
+    undo() {
+        const idx = this.groups.indexOf(this.groupData);
+        if (idx !== -1) {
+            this.groups.splice(idx, 1);
+        }
+        this.onChanged();
+    }
+}
+
+class DeleteGroupOp {
+    name = 'deleteGroup';
+    groups: GroupData[];
+    groupData: GroupData;
+    selectedGroupDataRef: { current: GroupData | null };
+    onChanged: () => void;
+    skipDo: boolean;
+
+    constructor(groups: GroupData[], groupData: GroupData, selectedGroupDataRef: { current: GroupData | null }, onChanged: () => void, skipDo = true) {
+        this.groups = groups;
+        this.groupData = groupData;
+        this.selectedGroupDataRef = selectedGroupDataRef;
+        this.onChanged = onChanged;
+        this.skipDo = skipDo;
+    }
+
+    do() {
+        if (!this.skipDo) {
+            const idx = this.groups.indexOf(this.groupData);
+            if (idx !== -1) this.groups.splice(idx, 1);
+            if (this.selectedGroupDataRef.current === this.groupData) {
+                this.selectedGroupDataRef.current = null;
+            }
+            this.onChanged();
+        }
+        this.skipDo = false;
+    }
+
+    undo() {
+        this.groups.push(this.groupData);
+        this.onChanged();
+    }
+}
+
+class ModifyGroupRangesOp {
+    name = 'modifyGroupRanges';
+    groupData: GroupData;
+    oldRanges: IndexRanges;
+    newRanges: IndexRanges;
+    onChanged: () => void;
+    skipDo: boolean;
+
+    constructor(groupData: GroupData, oldRanges: IndexRanges, newRanges: IndexRanges, onChanged: () => void, skipDo = true) {
+        this.groupData = groupData;
+        this.oldRanges = oldRanges;
+        this.newRanges = newRanges;
+        this.onChanged = onChanged;
+        this.skipDo = skipDo;
+    }
+
+    do() {
+        if (!this.skipDo) {
+            this.groupData.ranges = this.newRanges;
+            this.onChanged();
+        }
+        this.skipDo = false;
+    }
+
+    undo() {
+        this.groupData.ranges = this.oldRanges;
+        this.onChanged();
+    }
+}
+
 class AddShapeOp {
     name = 'addShape';
     scene: Scene;
@@ -625,5 +727,8 @@ export {
     AddSplatOp,
     SplatRenameOp,
     AddShapeOp,
-    MergeOp
+    MergeOp,
+    AddGroupOp,
+    DeleteGroupOp,
+    ModifyGroupRangesOp
 };

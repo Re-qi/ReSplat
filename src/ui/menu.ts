@@ -5,6 +5,7 @@ import { recentFiles } from '../recent-files';
 import { ShortcutManager } from '../shortcut-manager';
 import { localize } from './localization';
 import { MenuPanel, MenuItem } from './menu-panel';
+import boltIcon from './svg/bolt.svg';
 import selectDelete from './svg/delete.svg';
 import sceneExport from './svg/export.svg';
 import sceneImport from './svg/import.svg';
@@ -98,9 +99,12 @@ class Menu extends Container {
         buttonsContainer.append(help);
 
         const viewOptions = new Button({
-            id: 'menu-bar-options-btn',
-            icon: 'E283'
+            id: 'menu-bar-options-btn'
         });
+
+        // Replace icon font with SVG
+        const boltSvg = createSvg(boltIcon);
+        viewOptions.dom.appendChild(boltSvg.dom);
 
         buttonsContainer.append(viewOptions);
 

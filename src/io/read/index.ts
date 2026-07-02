@@ -11,5 +11,12 @@ export {
 // Loading functions
 export {
     loadGSplatData,
-    validateGSplatData
+    loadSogDecimated,
+    readSogMeta,
+    readPlyMeta,
+    validateGSplatData,
+    SOGTooLargeError,
+    getSOGCount,
+    SOG_WARN_COUNT,
+    SOG_BLOCK_COUNT
 } from './loader';

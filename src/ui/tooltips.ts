@@ -29,6 +29,7 @@ class Tooltips extends Container {
         this.register = (target: Element, textString: string, direction: Direction = 'bottom') => {
 
             const activate = () => {
+                if (!target.dom) return;
                 const rect = target.dom.getBoundingClientRect();
                 const midx = Math.floor((rect.left + rect.right) * 0.5);
                 const midy = Math.floor((rect.top + rect.bottom) * 0.5);

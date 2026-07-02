@@ -7,7 +7,13 @@ export {
     BlobReadSource,
     MappedReadFileSystem,
     loadGSplatData,
-    validateGSplatData
+    loadSogDecimated,
+    readSogMeta,
+    readPlyMeta,
+    validateGSplatData,
+    SOGTooLargeError,
+    SOG_WARN_COUNT,
+    SOG_BLOCK_COUNT
 } from './read';
 
 // Write operations

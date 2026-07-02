@@ -60,22 +60,23 @@
     border-radius: 2px;
     border-bottom-left-radius: 0;
     background-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-    &::before {
-        font-size: 16px !important;
-        line-height: 100%;
+    > svg {
         color: $text-secondary;
     }
 
     &:hover {
         background-color: $bcg-dark;
-        &::before {
+        > svg {
             color: $text-primary;
         }
     }
 
     &.active {
-        &::before {
+        > svg {
             color: $clr-hilight;
         }
     }

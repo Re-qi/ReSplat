@@ -14,6 +14,8 @@ import {
 } from 'playcanvas';
 
 import { AssetLoader } from './asset-loader';
+import { BlockingPlane } from './blocking-plane';
+import { BoxShape } from './box-shape';
 import { Camera } from './camera';
 import { CameraPoseGizmos } from './camera-pose-gizmos';
 import { CommandQueue } from './command-queue';
@@ -25,6 +27,7 @@ import { Outline } from './outline';
 import { PCApp } from './pc-app';
 import { SceneConfig } from './scene-config';
 import { SceneState } from './scene-state';
+import { SphereShape } from './sphere-shape';
 import { Splat } from './splat';
 import { SplatOverlay } from './splat-overlay';
 import { Underlay } from './underlay';
@@ -248,6 +251,15 @@ class Scene {
         splats.forEach((splat) => {
             this.remove(splat);
             (splat as Splat).destroy();
+        });
+
+        // Also remove user-created shapes (包裹体)
+        const shapes = this.elements.filter(e =>
+            e instanceof BoxShape || e instanceof SphereShape || e instanceof BlockingPlane
+        );
+        shapes.forEach((shape) => {
+            this.remove(shape);
+            shape.destroy();
         });
     }
 

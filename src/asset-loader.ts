@@ -2,7 +2,7 @@ import { ReadFileSystem } from '@playcanvas/splat-transform';
 import { AppBase, Asset, GSplatResource } from 'playcanvas';
 
 import { Events } from './events';
-import { loadGSplatData, validateGSplatData } from './io';
+import { loadGSplatData, loadSogDecimated, validateGSplatData } from './io';
 import { Splat } from './splat';
 
 // handles loading gsplat assets using splat-transform
@@ -15,14 +15,22 @@ class AssetLoader {
         this.events = events;
     }
 
-    async load(filename: string, fileSystem: ReadFileSystem, animationFrame?: boolean, skipReorder?: boolean) {
+    async load(
+        filename: string,
+        fileSystem: ReadFileSystem,
+        animationFrame?: boolean,
+        skipReorder?: boolean,
+        decimatePercent?: number
+    ) {
         if (!animationFrame) {
             this.events.fire('startSpinner');
         }
 
         try {
-            // Skip reordering for animation frames (speed) or when explicitly requested (already ordered)
-            const { gsplatData, transform } = await loadGSplatData(filename, fileSystem, skipReorder || animationFrame);
+            // Use stride-sampled loading when decimatePercent is specified
+            const { gsplatData, transform } = decimatePercent != null
+                ? await loadSogDecimated(filename, fileSystem, decimatePercent)
+                : await loadGSplatData(filename, fileSystem, skipReorder || animationFrame);
             validateGSplatData(gsplatData);
 
             const asset = new Asset(filename, 'gsplat', { url: `local-asset-${Date.now()}`, filename });

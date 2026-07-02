@@ -326,8 +326,15 @@ class SplatList extends Container {
 
                     const stage = clickStages.get(key) ?? 0;
                     const gizmoOnThisSplat = events.invoke('selection') === key;
+                    const groupActive = events.invoke('pointCloudGroup.activeGroup');
 
-                    if (stage === 0) {
+                    if (groupActive) {
+                        // Point cloud group is active: clicking the splat-item
+                        // should switch gizmo back to entity-level without
+                        // deselecting gaussians. Reset stage to 0.
+                        events.fire('selection', key);
+                        clickStages.set(key, 1);
+                    } else if (stage === 0) {
                         // Stage 1: first click → select this splat
                         events.fire('selection', key);
                         clickStages.set(key, 1);

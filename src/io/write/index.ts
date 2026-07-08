@@ -8,5 +8,7 @@ export { BrowserFileSystem } from './browser-file-system';
 // Writer utilities
 export {
     GZipWriter,
-    ProgressWriter
+    ZstdWriter,
+    ProgressWriter,
+    isZstdSupported
 } from './writer';

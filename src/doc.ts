@@ -1,12 +1,12 @@
-import { ZipFileSystem, ZipReadFileSystem } from '@playcanvas/splat-transform';
+import { ZipFileSystem, ZipReadFileSystem, ReadFileSystem } from '@playcanvas/splat-transform';
 
 import { EditHistory } from './edit-history';
 import { Events } from './events';
-import { BrowserFileSystem, BlobReadSource } from './io';
+import { BrowserFileSystem, BlobReadSource, DecompressingReadSource, ZstdWriter, GZipWriter, isZstdSupported } from './io';
 import { recentFiles } from './recent-files';
 import { Scene } from './scene';
 import { Splat } from './splat';
-import { serializeSog } from './splat-serialize';
+import { serializePlyToWriter, SerializeSettings } from './splat-serialize';
 import { Transform } from './transform';
 import { localize } from './ui/localization';
 
@@ -103,15 +103,33 @@ const registerDocEvents = (scene: Scene, events: Events, editHistory: EditHistor
 
             // run through each splat and load it
             for (let i = 0; i < document.splats.length; ++i) {
-                const splatDir = `splat_${i}.sog`;
                 const splatSettings = document.splats[i];
 
-                // load SOG from the zip filesystem
-                const splat = await scene.assetLoader.load(splatDir, zipFs, false, true);
+                // load compressed PLY via streaming decompression (avoids OOM for large files)
+                const ext = isZstdSupported() ? '.ply.zst' : '.ply.gz';
+                const algo = isZstdSupported() ? 'zstd' : 'gzip';
+                const compressedSource = await zipFs.createSource(`splat_${i}${ext}`);
+                const decompressingSource = new DecompressingReadSource(compressedSource, algo);
 
+                // create a simple filesystem wrapper for the decompressing source
+                const plyFs: ReadFileSystem = {
+                    createSource: (filename: string) => {
+                        if (filename === `splat_${i}.ply`) {
+                            return Promise.resolve(decompressingSource);
+                        }
+                        return Promise.reject(new Error(`File not found: ${filename}`));
+                    }
+                };
+
+                const splat = await scene.assetLoader.load(`splat_${i}.ply`, plyFs, false, true);
                 await scene.add(splat);
 
-                splat.docDeserialize(splatSettings);
+                // PLY format bakes world transform into vertex data during save.
+                // Save the entity's current transform (set by PLY loader), restore
+                // non-transform properties via docDeserialize, then re-apply the
+                // PLY rotation so rendering stays correct.
+                const savedRot = splat.entity.getLocalRotation().clone();
+                splat.docDeserialize({ ...splatSettings, position: [0, 0, 0], rotation: [savedRot.x, savedRot.y, savedRot.z, savedRot.w], scale: [1, 1, 1] });
             }
 
             // FIXME: trigger scene bound calc in a better way
@@ -180,8 +198,12 @@ const registerDocEvents = (scene: Scene, events: Events, editHistory: EditHistor
                 return splatGroups.map(g => ({ name: g.name, indices: Array.from(g.indices) }));
             });
 
+            // determine compression format
+            const useZstd = isZstdSupported();
+            const format = useZstd ? 'ply-zstd' : 'ply-gzip';
+
             const document = {
-                version: 0,
+                version: 1,
                 camera: scene.camera.docSerialize(),
                 view: events.invoke('docSerialize.view'),
                 poseSets: events.invoke('docSerialize.poseSets'),
@@ -191,11 +213,12 @@ const registerDocEvents = (scene: Scene, events: Events, editHistory: EditHistor
                 editHistory: editHistory.serialize()
             };
 
-            const sogSettings = {
-                iterations: 10,
-                keepStateData: true,
-                keepWorldTransform: true,
-                keepColorTint: true
+            const plySettings: SerializeSettings = {
+                keepStateData: false,
+                preserveDeleted: true,
+                keepWorldTransform: false,
+                keepColorTint: false,
+                skipPlyRotation: false
             };
 
             // Create browser filesystem and zip filesystem
@@ -208,9 +231,13 @@ const registerDocEvents = (scene: Scene, events: Events, editHistory: EditHistor
             await docWriter.write(new TextEncoder().encode(JSON.stringify(document)));
             await docWriter.close();
 
-            // Write each splat as SOG (compressed, ~10x smaller than PLY)
+            // Write each splat as compressed PLY
             for (let i = 0; i < splats.length; ++i) {
-                await serializeSog([splats[i]], { ...sogSettings, filename: `splat_${i}.sog` }, zipFs);
+                const ext = useZstd ? '.ply.zst' : '.ply.gz';
+                const zipWriter = await zipFs.createWriter(`splat_${i}${ext}`);
+                const compressedWriter = useZstd ? new ZstdWriter(zipWriter) : new GZipWriter(zipWriter);
+                await serializePlyToWriter([splats[i]], plySettings, compressedWriter);
+                await compressedWriter.close();
             }
 
             // Close zip (also closes underlying browser writer)

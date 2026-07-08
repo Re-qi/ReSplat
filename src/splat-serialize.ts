@@ -40,6 +40,7 @@ type SerializeSettings = {
     // the following options are used when serializing the PLY for document save
     // and are only supported by serializePly
     keepStateData?: boolean;        // keep the state data array
+    preserveDeleted?: boolean;      // keep deleted gaussians in vertex data (for index consistency)
     keepWorldTransform?: boolean;   // don't apply the world transform when resolving splat transforms
     keepColorTint?: boolean;        // refrain from applying color tints
     skipPlyRotation?: boolean;      // skip the 180° Z rotation for PLY coordinate system (used for in-memory merge)
@@ -164,6 +165,7 @@ class GaussianFilter {
         const minOpacity = serializeSettings.minOpacity ?? 0;
         const removeInvalid = serializeSettings.removeInvalid ?? false;
         const keepStateData = serializeSettings.keepStateData ?? false;
+        const preserveDeleted = serializeSettings.preserveDeleted ?? false;
 
         // properties where +Infinity and -Infinity are valid values
         const infOk = new Set(['opacity']);
@@ -171,9 +173,9 @@ class GaussianFilter {
         const negInfOk = new Set(['scale_0', 'scale_1', 'scale_2']);
 
         this.test = (i: number) => {
-            // splat is deleted, always removed unless we're keeping state data
-            // (in which case deleted splats must be preserved so indices stay valid)
-            if (!keepStateData && (state[i] & State.deleted) !== 0) {
+            // splat is deleted, skip unless preserving state data (for index validity)
+            // or explicitly preserving deleted gaussians
+            if (!keepStateData && !preserveDeleted && (state[i] & State.deleted) !== 0) {
                 return false;
             }
 
@@ -518,7 +520,7 @@ class SingleSplat {
     }
 }
 
-const serializePly = async (splats: Splat[], serializeSettings: SerializeSettings, fs: FileSystem, filename = 'output.ply', progress?: ProgressFunc): Promise<void> => {
+const serializePlyToWriter = async (splats: Splat[], serializeSettings: SerializeSettings, writer: Writer, progress?: ProgressFunc): Promise<void> => {
     const { maxSHBands, keepStateData } = serializeSettings;
 
     // create filter and count total gaussians
@@ -564,9 +566,6 @@ const serializePly = async (splats: Splat[], serializeSettings: SerializeSetting
 
     const header = new TextEncoder().encode(headerText);
 
-    // create writer from filesystem
-    const writer = await fs.createWriter(filename);
-
     // construct a progress writer over the writer
     const progressWriter = new ProgressWriter(writer, header.byteLength + totalGaussians * gaussianSizeBytes, progress);
 
@@ -608,6 +607,11 @@ const serializePly = async (splats: Splat[], serializeSettings: SerializeSetting
     }
 
     progressWriter.close();
+};
+
+const serializePly = async (splats: Splat[], serializeSettings: SerializeSettings, fs: FileSystem, filename = 'output.ply', progress?: ProgressFunc): Promise<void> => {
+    const writer = await fs.createWriter(filename);
+    await serializePlyToWriter(splats, serializeSettings, writer, progress);
     await writer.close();
 };
 
@@ -1494,6 +1498,7 @@ const serializeSog = async (splats: Splat[], settings: SogSettings, fs: FileSyst
 export {
     Writer,
     serializePly,
+    serializePlyToWriter,
     serializePlyCompressed,
     serializeStandardPly,
     serializeSplat,

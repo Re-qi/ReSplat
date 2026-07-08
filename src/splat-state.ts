@@ -108,10 +108,6 @@ class SplatState {
     // idempotent and cheap when nothing is dirty.
     flush(): void {
         if (this.dirtyLo < 0) return;
-        // full upload. sub-rect upload is a worthwhile future optimisation
-        // (would drop a 4M-byte upload to a few KB for small selections) but
-        // requires engine-side support; current path keeps the same behaviour
-        // as the prior `updateState` lock/set/unlock pair.
         const buffer = this.gpu.lock() as Uint8Array;
         buffer.set(this.data);
         this.gpu.unlock();

@@ -5,6 +5,7 @@
 // Read operations
 export {
     BlobReadSource,
+    DecompressingReadSource,
     MappedReadFileSystem,
     loadGSplatData,
     loadSogDecimated,
@@ -20,5 +21,7 @@ export {
 export {
     BrowserFileSystem,
     GZipWriter,
-    ProgressWriter
+    ZstdWriter,
+    ProgressWriter,
+    isZstdSupported
 } from './write';

@@ -76,4 +76,60 @@ class ProgressWriter implements Writer {
     }
 }
 
-export { GZipWriter, ProgressWriter };
+/**
+ * Compress the incoming stream with zstd.
+ */
+class ZstdWriter implements Writer {
+    write: (data: Uint8Array) => Promise<void>;
+    close: () => Promise<void>;
+
+    private cursor = 0;
+
+    get bytesWritten(): number {
+        return this.cursor;
+    }
+
+    constructor(writer: Writer) {
+        const stream = new CompressionStream('zstd' as any);
+        const streamWriter = stream.writable.getWriter();
+        const streamReader = stream.readable.getReader();
+
+        // hook up the reader side of the compressed stream
+        const reader = (async () => {
+            while (true) {
+                const { done, value } = await streamReader.read();
+                if (done) break;
+                await writer.write(value);
+            }
+        })();
+
+        this.write = async (data: Uint8Array) => {
+            this.cursor += data.byteLength;
+            await streamWriter.ready;
+            await streamWriter.write(data as unknown as ArrayBuffer);
+        };
+
+        this.close = async () => {
+            // close the writer, we're done
+            await streamWriter.close();
+
+            // wait for the reader to finish sending data
+            await reader;
+        };
+    }
+}
+
+/**
+ * Check if zstd compression is available in the browser.
+ */
+const isZstdSupported = (): boolean => {
+    try {
+        // eslint-disable-next-line no-new
+        new CompressionStream('zstd' as any);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+export { GZipWriter, ZstdWriter, ProgressWriter, isZstdSupported };

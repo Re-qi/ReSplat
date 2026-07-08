@@ -230,7 +230,7 @@ class Splat extends Element {
     async updateSorting() {
         const state = this.splatData.getProp('state') as Uint8Array;
 
-        let mapping;
+        let mapping: Uint32Array;
 
         // create a sorter mapping to remove deleted splats
         if (this.numSplats !== state.length) {
@@ -240,6 +240,13 @@ class Splat extends Element {
                 if ((state[i] & State.deleted) === 0) {
                     mapping[idx++] = i;
                 }
+            }
+        } else {
+            // Explicit identity mapping: setMapping(null) may leave stale
+            // state in the worker, preventing deleted points from reappearing.
+            mapping = new Uint32Array(this.numSplats);
+            for (let i = 0; i < this.numSplats; i++) {
+                mapping[i] = i;
             }
         }
 

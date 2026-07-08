@@ -149,7 +149,7 @@ class EditHistory {
     }
 
     deserialize(data: any, scene: Scene) {
-        return this.queue(() => {
+        return this.queue(async () => {
             this.history.forEach((editOp) => {
                 editOp.destroy?.();
             });
@@ -171,7 +171,7 @@ class EditHistory {
             // (needed because SOG/PLY data may not include state changes)
             for (let i = 0; i < this.cursor; i++) {
                 try {
-                    this.history[i].do();
+                    await this.history[i].do();
                 } catch (e) {
                     console.warn(`Failed to replay EditOp[${i}]: ${e.message}`);
                 }

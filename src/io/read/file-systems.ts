@@ -14,6 +14,76 @@ import {
 const BLOB_CHUNK_SIZE = 4 * 1024 * 1024;
 
 /**
+ * ReadStream that decompresses data on-the-fly using browser DecompressionStream.
+ * Avoids loading the entire decompressed file into memory.
+ */
+class DecompressingReadStream extends ReadStream {
+    private reader: ReadableStreamDefaultReader<Uint8Array>;
+    private currentChunk: Uint8Array | null = null;
+    private chunkOffset = 0;
+    private done = false;
+
+    constructor(compressedSource: ReadSource, algo: string) {
+        // size is unknown when decompressing
+        super(undefined);
+
+        const ds = new DecompressionStream(algo as any);
+        const dsWriter = ds.writable.getWriter();
+        const dsReader = ds.readable.getReader();
+
+        this.reader = dsReader;
+
+        // feed compressed data into the decompression stream in the background
+        const feed = (async () => {
+            const stream = compressedSource.read();
+            const buf = new Uint8Array(BLOB_CHUNK_SIZE);
+            while (true) {
+                const bytesRead = await stream.pull(buf);
+                if (bytesRead === 0) break;
+                await dsWriter.write(buf.subarray(0, bytesRead) as unknown as ArrayBuffer);
+                this.bytesRead += bytesRead;
+            }
+            await dsWriter.close();
+        })();
+
+        // store the feed promise so errors propagate
+        this._feedPromise = feed;
+    }
+
+    private _feedPromise: Promise<void>;
+
+    async pull(target: Uint8Array): Promise<number> {
+        if (this.done) return 0;
+
+        let totalWritten = 0;
+
+        while (totalWritten < target.length) {
+            // if we have a partially consumed chunk, use it first
+            if (this.currentChunk && this.chunkOffset < this.currentChunk.length) {
+                const remaining = this.currentChunk.length - this.chunkOffset;
+                const toCopy = Math.min(remaining, target.length - totalWritten);
+                target.set(this.currentChunk.subarray(this.chunkOffset, this.chunkOffset + toCopy), totalWritten);
+                this.chunkOffset += toCopy;
+                totalWritten += toCopy;
+                continue;
+            }
+
+            // read next decompressed chunk
+            const { done, value } = await this.reader.read();
+            if (done) {
+                this.done = true;
+                break;
+            }
+
+            this.currentChunk = value;
+            this.chunkOffset = 0;
+        }
+
+        return totalWritten;
+    }
+}
+
+/**
  * ReadStream implementation for reading from Blob/File.
  */
 class BlobReadStream extends ReadStream {
@@ -74,6 +144,34 @@ class BlobReadSource implements ReadSource {
 
     close(): void {
         this.closed = true;
+    }
+}
+
+/**
+ * ReadSource that transparently decompresses data from a compressed source.
+ * Streams decompression to avoid loading the entire decompressed file into memory.
+ */
+class DecompressingReadSource implements ReadSource {
+    readonly size: number = 0;  // unknown size after decompression
+    readonly seekable: boolean = false;
+
+    private compressedSource: ReadSource;
+    private algo: string;
+
+    constructor(compressedSource: ReadSource, algo: string) {
+        this.compressedSource = compressedSource;
+        this.algo = algo;
+    }
+
+    read(): ReadStream {
+        return new BufferedReadStream(
+            new DecompressingReadStream(this.compressedSource, this.algo),
+            BLOB_CHUNK_SIZE
+        );
+    }
+
+    close(): void {
+        this.compressedSource.close();
     }
 }
 
@@ -142,5 +240,6 @@ class MappedReadFileSystem implements ReadFileSystem {
 
 export {
     BlobReadSource,
+    DecompressingReadSource,
     MappedReadFileSystem
 };

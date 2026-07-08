@@ -5,6 +5,7 @@
 // File system implementations
 export {
     BlobReadSource,
+    DecompressingReadSource,
     MappedReadFileSystem
 } from './file-systems';
 
